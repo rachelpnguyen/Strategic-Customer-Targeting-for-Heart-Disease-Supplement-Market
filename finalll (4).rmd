@@ -1,0 +1,222 @@
+---
+title: "Strategic Customer Targeting for Heart Health Supplement Market"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(rio)
+library(tidyverse)
+library(atus)
+library(plotly)
+library(lubridate)
+library(dygraphs)
+library(stringr)
+library(shiny)
+library(ggiraph)
+data <- import('heart_2020_cleaned.csv')
+```
+
+## Row {data-width="350"}
+
+### Top 5 Age Categories by Total People {data-width="300"}
+
+```{r}
+df <- data.frame(AgeCategory = c("18-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69", "70-74", "75-79", "80 or older"),
+                 TotalPeople = c(21064, 16955, 18753, 20550, 21006, 21791, 25382, 29757, 33686, 34151, 31065, 21482, 24153))
+
+# Order the data by TotalPeople in descending order and take the top 5
+df_top5 <- df %>% 
+  arrange(desc(TotalPeople)) %>% 
+  head(5)
+abcdoremi <- df_top5%>%
+  arrange(order(AgeCategory))
+
+abcdoremi$color <- c("grey", "#95BDFF", "grey", "#95BDFF", "#95BDFF")
+
+p <- ggplot(abcdoremi, aes(x = AgeCategory, y = TotalPeople, fill = color)) +
+  geom_bar(stat = "identity") + 
+  labs(x = "Age Category", y = "Total People") +
+  scale_fill_manual(values = c("#95BDFF", 'grey')) +
+  theme_classic() +
+  guides(fill = FALSE) 
+
+ggplotly(p)
+```
+
+### Percentage of Heart Disease by Age Category {data-width="500"}
+
+```{r}
+p1 <- data.frame(
+  AgeCategory = c("18-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69", "70-74", "75-79", "80 or older"),
+  total = c(21064, 16955, 18753, 20550, 21006, 21791, 25382, 29757, 33686, 34151, 31065, 21482, 24153),
+  count = c(130, 133, 226, 296, 486, 744, 1383, 2202, 3327, 4101, 4847, 4049, 5449),
+  percentage = c(0.6171667, 0.7844294, 1.2051405, 1.4403893, 2.3136247, 3.4142536, 5.4487432, 7.3999395, 9.8765066, 12.0084331, 15.6027684, 18.8483381, 22.5603445)
+)
+
+
+p10 <- ggplot(p1, aes(x = AgeCategory, y = percentage)) +
+  geom_line(group = 1, color = "steelblue") +
+  geom_point(color = "steelblue") +
+  scale_color_continuous() + 
+  labs(x = "Age Category", y = "Percentage") +
+  theme_classic() 
+
+ggplotly(p10)
+
+```
+
+## Row {data-width="350"}
+
+### Percentage of People with Heart Disease by Sleep Category {data-width="300"}
+
+```{r}
+
+data <- data %>%
+  mutate(SleepCategory = ifelse(SleepTime > 7, "Less than 7 hours", "More than 7 hours")) 
+
+data_percent <- data %>%
+  group_by(SleepCategory, HeartDisease) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+sleep1 <- data_percent%>%
+  filter(HeartDisease == "Yes")
+
+p2 <- ggplot(sleep1, aes(x=SleepCategory, y= percentage, fill=SleepCategory)) +
+  geom_bar(stat="identity", position=position_dodge()) +
+  scale_fill_manual(values = c("Less than 7 hours" = "#FFF89A", "More than 7 hours" = "grey")) +
+  ylab("Percentage") +
+  xlab("Sleep Category") +
+  theme_classic() + theme(legend.position = "none")
+
+ggplotly(p2)
+```
+
+### Percentage of People with Heart Disease by Smoking Status {data-width="300"}
+
+```{r}
+data$Smoking <- ifelse(data$Smoking == "No", "No Smoking", "Smoking")
+
+# Calculate the percentages
+data_percentages <- data %>%
+  group_by(Smoking, HeartDisease) %>%
+  summarise(n = n()) %>%
+  mutate(percentage = n / sum(n) * 100) 
+
+# Now, let's filter out only the rows where HeartDisease is 'Yes' or equivalent value
+data_percentages <- data_percentages %>%
+  filter(HeartDisease == 'Yes') # Replace 'Yes' with the correct value indicating presence of heart disease in your dataset
+
+# Plot the graph
+p3 <- ggplot(data_percentages, aes(x = Smoking, y = percentage, fill = Smoking)) +
+  geom_bar(stat="identity", position=position_dodge()) +
+  scale_fill_manual(values = c("No Smoking" = "grey", "Smoking" = "pink")) +
+  labs(x = "Smoking", y = "Percentage")+
+   theme_classic() + theme(legend.position = "none")
+
+ggplotly(p3)
+```
+
+### Distribution of BMI Category among Individuals with Heart Disease {data-width="450"}
+
+```{r}
+data1 <- data %>%
+  mutate(BMICategory = case_when(
+    BMI < 18.5 ~ "Underweight",
+    BMI >= 18.5 & BMI < 25 ~ "Healthy weight",
+    BMI >= 25 & BMI < 30 ~ "Overweight",
+    BMI >= 30 ~ "Obese"
+  ))
+
+# Calculate total count for each BMI category
+total_counts <- data1 %>%
+  group_by(BMICategory) %>%
+  summarise(total = n(), .groups = 'drop')
+
+# Calculate count of people with heart disease for each BMI category
+heart_disease_counts <- data1 %>%
+  filter(HeartDisease == "Yes") %>%
+  group_by(BMICategory) %>%
+  summarise(count = n(), .groups = 'drop')
+
+# Join the two data frames together
+bmi <- inner_join(heart_disease_counts, total_counts, by = "BMICategory")
+
+# Calculate the percentage
+bmi123 <- bmi %>%
+  mutate(percentage = (count / total) * 100)
+# Create new variable for highlighting
+bmi123 <- bmi123 %>%
+  mutate(Highlight = ifelse(percentage %in% tail(sort(percentage), 2), "High", "Not high"))
+
+# Reorder factors
+bmi123$BMICategory <- forcats::fct_reorder(bmi123$BMICategory, bmi123$percentage)
+
+p4 <- ggplot(bmi123, aes(x=BMICategory, y=percentage, fill=Highlight)) +
+  geom_bar(stat="identity") +
+  scale_fill_manual(values=c("High"="#BE9FE1", "Not high"="grey")) +
+  theme_classic() +
+  theme(legend.position="none") + 
+  labs(x="BMI Category", y="Percentage")
+
+ggplotly(p4)
+```
+
+## Row {data-width="450"}
+
+### Potential Heart Disease Risk Groups: A Comparative Analysis of Prevalence {data-width="450"}
+
+```{r}
+# Filter the data to only those who do not have heart disease
+no_heart_disease <- data1 %>% filter(HeartDisease == "No")
+
+# Calculate the percentages
+smokers_no_hd <- no_heart_disease %>% filter(Smoking == "Smoking") %>% nrow() 
+overweight_no_hd <- no_heart_disease %>% filter(BMICategory %in% c("Overweight", "Obese")) %>% nrow() 
+
+age_no_hd <- no_heart_disease %>% filter(AgeCategory %in% c("60-64", "65-69", "70-74", "75-79", "80 or older")) %>% nrow() 
+
+
+sleep_no_hd <- no_heart_disease %>% filter(SleepCategory == "Less than 7 hours") %>% nrow() 
+
+
+# Combine into a data frame
+results <- data.frame(
+  Category = c("Smokers", "Overweight/Obese", "Sleep <=7 hours", "Age 60 and older"),
+  Total_People = c(smokers_no_hd, overweight_no_hd, sleep_no_hd, age_no_hd)
+)
+final <- results %>%
+  filter(Category != 'Age 60 and older')
+
+p5 <- ggplot(final, aes(x = Total_People , y = reorder(Category, Total_People), fill = c('#BADFDB'))) +
+  geom_bar(stat = "identity") +
+  xlab("Total People") +
+  ylab("Risk Factors") +
+  scale_fill_identity() +
+  theme_classic() + theme(legend.position = "none")
+
+ggplotly(p5)
+```
+
+### Venn Diagram Risk Factors {data-width="350"}
+
+```{r}
+library(gplots)
+
+# Define the sets
+smokers_noHD <- which(data$Smoking == "Smoking" & data$HeartDisease == "No")
+lowSleep_noHD <- which(data$SleepTime < 7 & data$HeartDisease == "No")
+highBMI_noHD <- which(data$BMI > 25 & data$HeartDisease == "No")
+
+# Create a list of these sets
+sets <- list("Smokers" = smokers_noHD, "Sleep <= 7 hours" = lowSleep_noHD, "Overweight/Obese" = highBMI_noHD)
+
+# Create the Venn diagram
+venn(sets)
+
+```
